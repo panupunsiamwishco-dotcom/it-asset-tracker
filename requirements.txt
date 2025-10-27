@@ -1,9 +1,11 @@
 streamlit==1.32.2
-rich==13.7.1
+rich==13.7.1            # ปักไว้กันชนกับ streamlit
 pandas==2.2.2
 qrcode[pil]==7.4.2
 reportlab==3.6.12
+
 gspread==6.1.2
 google-auth==2.35.0
+
 streamlit-authenticator==0.4.1
 streamlit-qr-code-scanner==0.2.4
