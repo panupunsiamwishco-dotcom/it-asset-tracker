@@ -1,14 +1,9 @@
 streamlit==1.32.2
-rich==13.7.1           # ปักไว้ให้เข้ากับ streamlit
+rich==13.7.1
 pandas==2.2.2
 qrcode[pil]==7.4.2
 reportlab==3.6.12
-
 gspread==6.1.2
 google-auth==2.35.0
-
-# รองรับ login (เวอร์ชันนี้ใช้ Pydantic v2 ได้ ไม่ต้องปัก pydantic เอง)
 streamlit-authenticator==0.4.1
-
-# คอมโพเนนต์สแกนกล้อง
 streamlit-qr-code-scanner==0.2.4
