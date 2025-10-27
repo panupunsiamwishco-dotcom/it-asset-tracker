@@ -1,8 +1,12 @@
 streamlit==1.37.1
-pandas
-qrcode[pil]
-reportlab
-gspread
-google-auth
-streamlit-authenticator
-streamlit-qr-code-scanner
+rich==13.7.1          # <-- แก้ประเด็นหลัก
+
+pandas>=2.0,<3
+qrcode[pil]==7.4.2
+reportlab==3.6.13
+
+gspread==6.0.2
+google-auth==2.34.0
+
+streamlit-authenticator==0.3.3
+streamlit-qr-code-scanner==0.2.4
