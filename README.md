@@ -1,26 +1,35 @@
 
-# IT Asset Tracker (Streamlit + SQLite)
+# IT Asset Tracker (Google Sheets + Login + Mobile QR)
 
-ภาษาไทย: เว็บแอปสำหรับเก็บประวัติอุปกรณ์ไอทีของแต่ละสาขา: เพิ่ม/แก้ไข/ลบ/ค้นหา, ดูประวัติ, สร้างแท็ก QR พิมพ์ลงสติ๊กเกอร์, โหมดสแกน (ใช้สแกนเนอร์แบบคีย์บอร์ด หรือคัดลอกวางจากมือถือ)
+## วิธีใช้ (Streamlit Cloud)
+1) สร้าง Google Sheet เปล่า แล้วคัดลอกค่า ID (ส่วนกลางของ URL)
+2) แชร์สิทธิ์ให้ service account (client_email) แบบ Editor
+3) ไปที่ Streamlit → Settings → Secrets ใส่ค่า:
+```
+SHEET_ID = "1xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-## ใช้งานเร็ว
-1) ติดตั้งไลบรารี:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2) รัน:
-   ```bash
-   streamlit run app.py
-   ```
-3) เปิดเว็บที่ลิงก์ในเทอร์มินัล (ปกติ http://localhost:8501)
+[gcp]
+type = "service_account"
+project_id = "your-project"
+private_key_id = "xxxx"
+private_key = "-----BEGIN PRIVATE KEY-----\n....\n-----END PRIVATE KEY-----\n"
+client_email = "your-sa@your-project.iam.gserviceaccount.com"
+client_id = "1234567890"
+token_uri = "https://oauth2.googleapis.com/token"
 
-## ฟีเจอร์
-- CRUD อุปกรณ์ + ประวัติ (asset_history)
-- ค้นหา + ฟิลเตอร์ตามสถานะ/หมวดหมู่/สาขา
-- สร้างแท็ก QR และพิมพ์เป็นไฟล์ PDF (กำหนดขนาดฉลากได้)
-- โหมดสแกน: ช่องรับค่าเพื่อใช้กับสแกนเนอร์บาร์โค้ด/QR แบบคีย์บอร์ด (หรือวางข้อความ)
-- ส่งออก CSV / นำเข้า CSV
-
-## ข้อแนะนำ
-- สำหรับการสแกนด้วยกล้องผ่านเว็บ (ไม่ใช้สแกนเนอร์คีย์บอร์ด) สามารถขยายภายหลังด้วยคอมโพเนนต์เสริมได้
-- หากต้องการเชื่อมต่อ Google Sheets แทน SQLite ผมจะให้โค้ดเวอร์ชันเชื่อมต่อให้ได้
+[auth]
+cookie_name = "it_asset_app"
+cookie_key = "change_this_key"
+  [auth.credentials.usernames.admin]
+  email = "admin@example.com"
+  name  = "Admin"
+  password = "$2b$12$qyB8S7y2cH1oDk7kqRr0xO2cWWZgH1eXG9dM9n1x1hJj9m6eY1gk2"
+```
+4) requirements.txt ต้องมี:
+```
+streamlit-authenticator
+gspread
+google-auth
+streamlit-qr-code-scanner
+```
+5) Deploy แล้วใช้งานได้เลย
