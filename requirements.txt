@@ -2,3 +2,7 @@ streamlit==1.37.1
 pandas
 qrcode[pil]
 reportlab
+gspread
+google-auth
+streamlit-authenticator
+streamlit-qr-code-scanner
