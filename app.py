@@ -16,7 +16,7 @@ from google.oauth2.service_account import Credentials
 # --- PDF via pure-Python fpdf2 ---
 from fpdf import FPDF
 
-st.set_page_config(page_title="IT Asset Tracker (GSheets + fpdf2)", page_icon="🖥️", layout="wide")
+st.set_page_config(page_title="IT Asset Tracker", page_icon="🖥️", layout="wide")
 
 SHEET_ID = st.secrets.get("SHEET_ID", "")
 GCP_INFO = dict(st.secrets.get("gcp", {}))
@@ -178,7 +178,7 @@ def do_login():
         st.stop()
 
 # ----------------------------- MAIN -----------------------------
-st.title("🖥️ IT Asset Tracker (Google Sheets + Login + Mobile Scan + fpdf2)")
+st.title("🖥️ SWC IT Asset Tracker")
 
 if not do_login():
     st.stop()
