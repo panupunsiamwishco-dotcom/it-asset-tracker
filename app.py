@@ -5,6 +5,35 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
+import streamlit as st
+
+def get_sheet_id():
+    # 1) ปกติอ่านจาก top-level
+    sid = st.secrets.get("SHEET_ID")
+    # 2) รองรับกรณีผู้ใช้ใส่ไว้ใน [gcp]
+    if not sid:
+        sid = (st.secrets.get("gcp", {}) or {}).get("SHEET_ID")
+    # 3) รองรับสะกดเป็นตัวเล็ก
+    if not sid:
+        sid = st.secrets.get("sheet_id")
+    # 4) ให้ใส่ชั่วคราวผ่าน UI
+    if not sid:
+        with st.sidebar.expander("ตั้งค่า SHEET_ID (ชั่วคราวในหน้านี้)"):
+            tmp = st.text_input("SHEET_ID", value=st.session_state.get("SHEET_ID", ""))
+            if st.button("ใช้ SHEET_ID นี้"):
+                st.session_state["SHEET_ID"] = tmp
+        sid = st.session_state.get("SHEET_ID")
+
+    # (ออปชัน) เปิดโหมด debug ดูว่า secrets มีคีย์อะไรบ้าง
+    if st.sidebar.checkbox("Debug: ดูคีย์ใน secrets"):
+        st.sidebar.write({
+            "top_level_keys": list(st.secrets.keys()),
+            "gcp_keys": list((st.secrets.get("gcp", {}) or {}).keys()),
+            "SHEET_ID_in_use": sid
+        })
+    return sid
+
+
 # =========[ CONFIG UI ]=========
 st.set_page_config(page_title="IT Asset Tracker (Google Sheets)", layout="wide")
 
