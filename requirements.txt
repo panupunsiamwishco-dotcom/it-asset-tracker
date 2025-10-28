@@ -1,14 +1,7 @@
-pip==24.2
-setuptools<75
-wheel
 
 streamlit==1.37.1
-rich==13.7.1
-numpy==1.26.4
 pandas==2.2.2
-
-qrcode[pil]==7.4.2
 fpdf2==2.7.9
-
+qrcode==7.4.2
+google-auth==2.34.0
 gspread==6.1.2
-google-auth==2.35.0
