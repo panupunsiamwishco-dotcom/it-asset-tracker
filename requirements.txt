@@ -4,13 +4,11 @@ wheel
 
 streamlit==1.32.2
 rich==13.7.1
-
-# ปัก numpy ชัดเจนเพื่อให้ pandas ดึง wheel ทันที
 numpy==2.0.2
 pandas==2.2.2
 
 qrcode[pil]==7.4.2
-reportlab==3.6.12
+fpdf2==2.7.9
 
 gspread==6.1.2
 google-auth==2.35.0
