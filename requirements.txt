@@ -2,10 +2,12 @@ pip==24.2
 setuptools<75
 wheel
 
-streamlit==1.32.2
+# ให้ตรงกับ streamlit-authenticator 0.4.1
+streamlit==1.37.1
+# streamlit 1.37.1 ต้องใช้ rich < 14
 rich==13.7.1
 
-# ให้เข้ากับข้อกำหนดของ streamlit 1.32.2
+# numpy < 2 เพื่อไม่ชนข้อกำหนดของ streamlit
 numpy==1.26.4
 pandas==2.2.2
 
@@ -15,5 +17,7 @@ fpdf2==2.7.9
 gspread==6.1.2
 google-auth==2.35.0
 
+# ต้องใช้คู่กับ streamlit >= 1.37.0
 streamlit-authenticator==0.4.1
-# streamlit-qr-code-scanner  ← ตัดออกชั่วคราว
+
+# (เวอร์ชันนี้ตัดตัวคอมโพเนนต์กล้องออกก่อน เราจะใส่ HTML5 กลับให้ทีหลัง)
