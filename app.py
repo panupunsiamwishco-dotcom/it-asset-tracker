@@ -5,9 +5,7 @@ import pandas as pd
 from datetime import datetime, date
 from io import BytesIO
 import qrcode
-
-# Auth
-import streamlit_authenticator as stauth
+import hashlib
 
 # Google Sheets
 import gspread
@@ -16,7 +14,7 @@ from google.oauth2.service_account import Credentials
 # --- PDF via pure-Python fpdf2 ---
 from fpdf import FPDF
 
-st.set_page_config(page_title="IT Asset Tracker", page_icon="🖥️", layout="wide")
+st.set_page_config(page_title="IT Asset Tracker (GSheets + fpdf2)", page_icon="🖥️", layout="wide")
 
 SHEET_ID = st.secrets.get("SHEET_ID", "")
 GCP_INFO = dict(st.secrets.get("gcp", {}))
@@ -123,62 +121,50 @@ def build_labels_pdf_fpdf(rows: pd.DataFrame, label_w_mm=62, label_h_mm=29, marg
 
     return pdf.output(dest="S").encode("latin-1")
 
-# ----------------------------- LOGIN (patched) -----------------------------
+# ----------------------------- SIMPLE LOGIN -----------------------------
+def sha256_hex(s: str) -> str:
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
 def do_login():
-    raw_users = (
-        st.secrets.get("auth", {})
-        .get("credentials", {})
-        .get("usernames", {})
-    )
-    creds = {"usernames": {}}
-    for uname, v in raw_users.items():
-        creds["usernames"][uname] = {
-            "email": v.get("email",""),
-            "name": v.get("name",""),
-            "password": v.get("password",""),
-        }
-    if not creds["usernames"]:
-        st.sidebar.error("ยังไม่พบผู้ใช้ใน secrets.toml → [auth.credentials.usernames.*]")
+    users = st.secrets.get("users", {})  # expected structure: users.<username>.*
+    if not users:
+        st.sidebar.error("ยังไม่พบผู้ใช้ใน secrets.toml → [users.<username>.*]")
         st.stop()
 
-    cookie_name = st.secrets.get("auth", {}).get("cookie_name", "it_asset_app")
-    cookie_key = st.secrets.get("auth", {}).get("cookie_key", "change_me")
+    st.sidebar.header("เข้าสู่ระบบ")
+    u = st.sidebar.text_input("ผู้ใช้", key="u")
+    p = st.sidebar.text_input("รหัสผ่าน", type="password", key="p")
+    submit = st.sidebar.button("Login")
 
-    authenticator = stauth.Authenticate(
-        credentials=creds,
-        cookie_name=cookie_name,
-        key=cookie_key,
-        cookie_expiry_days=7,
-    )
+    if "auth_ok" not in st.session_state:
+        st.session_state["auth_ok"] = False
 
-    login_ret = authenticator.login(
-        location="sidebar",
-        fields={"Form name":"เข้าสู่ระบบ","Username":"ผู้ใช้","Password":"รหัสผ่าน"}
-    )
+    if submit:
+        rec = users.get(u)
+        ok = False
+        if rec:
+            if "password_plain" in rec and p == rec.get("password_plain",""):
+                ok = True
+            elif "password_sha256" in rec and sha256_hex(p) == rec.get("password_sha256","").lower():
+                ok = True
+        if ok:
+            st.session_state["auth_ok"] = True
+            st.session_state["current_user"] = u
+            st.sidebar.success(f"ยินดีต้อนรับ {u}")
+        else:
+            st.sidebar.error("ผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
 
-    name = auth_status = username = None
-    if isinstance(login_ret, tuple) and len(login_ret) == 3:
-        name, auth_status, username = login_ret
-    elif isinstance(login_ret, dict):
-        name = login_ret.get("name")
-        auth_status = login_ret.get("authentication_status")
-        username = login_ret.get("username")
-    else:
-        st.stop()
-
-    if auth_status:
-        authenticator.logout("ออกจากระบบ", "sidebar")
-        st.sidebar.success(f"ยินดีต้อนรับ {name}")
-        st.session_state["current_user"] = username
+    if st.session_state.get("auth_ok"):
+        if st.sidebar.button("ออกจากระบบ"):
+            for k in ["auth_ok","current_user","u","p"]:
+                st.session_state.pop(k, None)
+            st.experimental_rerun()
         return True
-    elif auth_status is False:
-        st.sidebar.error("ผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
-        return False
     else:
         st.stop()
 
 # ----------------------------- MAIN -----------------------------
-st.title("🖥️ SWC IT Asset Tracker")
+st.title("🖥️ IT Asset Tracker (Google Sheets + Login + Mobile Scan + fpdf2) — SimpleAuth")
 
 if not do_login():
     st.stop()
