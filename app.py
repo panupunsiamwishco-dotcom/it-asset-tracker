@@ -28,7 +28,9 @@ def ensure_login() -> bool:
     st.sidebar.header("เข้าสู่ระบบ (Simple Auth)")
     users = st.secrets.get("users", None)
     if users is None or not isinstance(users, dict) or len(users) == 0:
-        st.sidebar.info("ยังไม่พบผู้ใช้ใน `secrets.toml → [users]`\nรูปแบบ: `[users.<username>] password="..."`")
+        st.sidebar.info("""ยังไม่พบผู้ใช้ใน `secrets.toml → [users]`
+รูปแบบ: `[users.<username>] password="..."`""")
+
         return True
 
     if "auth_user" not in st.session_state:
