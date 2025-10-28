@@ -1,5 +1,6 @@
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from datetime import datetime, date
 from io import BytesIO
@@ -12,13 +13,6 @@ import streamlit_authenticator as stauth
 import gspread
 from google.oauth2.service_account import Credentials
 
-# QR Scanner (webcam/mobile)
-try:
-    from streamlit_qr_code_scanner import qr_code_scanner
-    QR_COMPONENT_OK = True
-except Exception:
-    QR_COMPONENT_OK = False
-
 # --- PDF via pure-Python fpdf2 ---
 from fpdf import FPDF
 
@@ -30,6 +24,7 @@ GCP_INFO = dict(st.secrets.get("gcp", {}))
 ASSET_HEADERS = ["id","asset_tag","name","category","serial_no","vendor","purchase_date","warranty_expiry","status","branch","location","assigned_to","installed_date","notes","last_update"]
 HIST_HEADERS = ["asset_id","asset_tag","action","details","user","branch","ts"]
 
+# ----------------------------- GSHEETS -----------------------------
 def get_gs_client():
     scopes = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(GCP_INFO, scopes=scopes)
@@ -81,16 +76,15 @@ def gen_next_tag(df, branch_code: str) -> str:
     return f"IT-{yy}{branch_code}-{count+1:04d}"
 
 def qrcode_png_bytes(data: str, box_size=6, border=1) -> bytes:
-    from io import BytesIO
     img = qrcode.make(data, box_size=box_size, border=border)
     buf = BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
 
+# ------------ fpdf2 label generator (A4, mm units) ---------------
 def build_labels_pdf_fpdf(rows: pd.DataFrame, label_w_mm=62, label_h_mm=29, margin_mm=5, cols=3, rows_per_page=8) -> bytes:
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=False, margin=0)
-    page_w, page_h = (210, 297)
     col_w = label_w_mm
     row_h = label_h_mm
     x0 = margin_mm
@@ -129,25 +123,20 @@ def build_labels_pdf_fpdf(rows: pd.DataFrame, label_w_mm=62, label_h_mm=29, marg
 
     return pdf.output(dest="S").encode("latin-1")
 
-# ----------------------------- AUTH -----------------------------
+# ----------------------------- LOGIN (patched) -----------------------------
 def do_login():
-    # โหลด credentials จาก secrets
     raw_users = (
         st.secrets.get("auth", {})
         .get("credentials", {})
         .get("usernames", {})
     )
-
-    # แปลงเป็นฟอร์แมตที่ streamlit-authenticator ต้องการ
     creds = {"usernames": {}}
     for uname, v in raw_users.items():
         creds["usernames"][uname] = {
-            "email": v.get("email", ""),
-            "name": v.get("name", ""),
-            "password": v.get("password", ""),  # ต้องเป็น bcrypt hash
+            "email": v.get("email",""),
+            "name": v.get("name",""),
+            "password": v.get("password",""),
         }
-
-    # ถ้าไม่มีผู้ใช้เลย ให้แจ้งและหยุด ไม่งั้น login() จะคืน None แล้วพัง
     if not creds["usernames"]:
         st.sidebar.error("ยังไม่พบผู้ใช้ใน secrets.toml → [auth.credentials.usernames.*]")
         st.stop()
@@ -162,22 +151,19 @@ def do_login():
         cookie_expiry_days=7,
     )
 
-    # ── สำคัญ: รองรับกรณี login() คืน None ในบางช่วง/บางเวอร์ชัน ──
     login_ret = authenticator.login(
         location="sidebar",
-        fields={"Form name": "เข้าสู่ระบบ", "Username": "ผู้ใช้", "Password": "รหัสผ่าน"},
+        fields={"Form name":"เข้าสู่ระบบ","Username":"ผู้ใช้","Password":"รหัสผ่าน"}
     )
 
-    # v0.4.x ปกติควรคืน (name, authentication_status, username)
     name = auth_status = username = None
     if isinstance(login_ret, tuple) and len(login_ret) == 3:
         name, auth_status, username = login_ret
-    elif isinstance(login_ret, dict):  # เผื่ออนาคตเปลี่ยนเป็น dict
+    elif isinstance(login_ret, dict):
         name = login_ret.get("name")
         auth_status = login_ret.get("authentication_status")
         username = login_ret.get("username")
     else:
-        # ยังไม่กดปุ่ม/ยังไม่พร้อม → แสดงฟอร์มไว้แล้วหยุดตรงนี้
         st.stop()
 
     if auth_status:
@@ -190,7 +176,6 @@ def do_login():
         return False
     else:
         st.stop()
-
 
 # ----------------------------- MAIN -----------------------------
 st.title("🖥️ IT Asset Tracker (Google Sheets + Login + Mobile Scan + fpdf2)")
@@ -352,20 +337,40 @@ elif page == "ประวัติการเปลี่ยนแปลง":
 
 elif page == "สแกน (มือถือกล้อง) + คีย์บอร์ด":
     st.subheader("โหมดสแกน")
-    tab1, tab2 = st.tabs(["📷 กล้อง (มือถือ/เว็บแคม)", "⌨️ คีย์บอร์ด/สแกนเนอร์"])
+
+    tab1, tab2 = st.tabs(["📷 กล้อง (ไม่ต้องติดตั้งแพ็กเกจ)", "⌨️ คีย์บอร์ด/สแกนเนอร์"])
+
     with tab1:
-        if QR_COMPONENT_OK:
-            st.caption("ให้สิทธิ์เข้ากล้อง แล้วสแกน QR/บาร์โค้ด (รองรับมือถือ)")
-            code = qr_code_scanner(key="qrscan")
-            if code:
-                st.success(f"สแกนได้: {code}")
-                df_match = df[(df["asset_tag"]==code) | (df["serial_no"]==code)]
-                if df_match.empty:
-                    st.warning("ไม่พบในระบบ")
-                else:
-                    st.dataframe(df_match)
-        else:
-            st.warning("โมดูลกล้องยังไม่พร้อมในระบบนี้ ใช้แท็บคีย์บอร์ดแทน หรือแจ้งผู้ดูแลให้ติดตั้ง 'streamlit-qr-code-scanner'")
+        st.caption("สแกนด้วยกล้องมือถือ/เว็บแคม (HTML5) — ถ้าไม่ทำงานให้ใช้แท็บคีย์บอร์ดแทน")
+        html = """
+        <div id="reader" style="width:100%;max-width:460px"></div>
+        <p id="result" style="font-family:sans-serif"></p>
+        <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
+        <script>
+          const reader = new Html5Qrcode('reader');
+          function onScanSuccess(decodedText) {
+            document.getElementById('result').innerText = 'Scanned: ' + decodedText;
+          }
+          function start() {
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            Html5Qrcode.getCameras().then(devices => {
+              if (devices && devices.length) {
+                const cameraId = devices[0].id;
+                reader.start(cameraId, config, onScanSuccess);
+              } else {
+                document.getElementById('result').innerText = 'ไม่พบกล้อง';
+              }
+            }).catch(err => {
+              document.getElementById('result').innerText = 'เปิดกล้องไม่ได้: ' + err;
+            });
+          }
+          start();
+        </script>
+        """
+        components.html(html, height=520, scrolling=False)
+
+        st.info("เมื่อสแกนแล้วให้คัดลอกค่าไปวางในแท็บคีย์บอร์ดด้านข้างเพื่อค้นหาอัตโนมัติ (เวอร์ชันไม่พึ่งแพ็กเกจ)")
+
     with tab2:
         st.caption("โฟกัสที่ช่องด้านล่าง แล้วสแกนได้เลย หรือวาง (paste) ข้อความจากแอพสแกนมือถือ")
         scanned = st.text_input("ผลลัพธ์การสแกน / พิมพ์ Asset Tag หรือ Serial")
@@ -406,3 +411,4 @@ elif page == "นำเข้า/ส่งออก":
                 ok += 1
             write_assets_df(ws_assets, df_cur)
             st.success(f"นำเข้าสำเร็จ {ok} รายการ, ล้มเหลว {fail}")
+
