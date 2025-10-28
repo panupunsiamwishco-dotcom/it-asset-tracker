@@ -4,10 +4,6 @@ import pandas as pd
 from datetime import datetime, date
 from io import BytesIO
 import qrcode
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm
-from reportlab.lib.utils import ImageReader
 
 # Auth
 import streamlit_authenticator as stauth
@@ -16,14 +12,17 @@ import streamlit_authenticator as stauth
 import gspread
 from google.oauth2.service_account import Credentials
 
-# QR Scanner component (webcam, works on mobile too)
+# QR Scanner (webcam/mobile)
 try:
     from streamlit_qr_code_scanner import qr_code_scanner
     QR_COMPONENT_OK = True
 except Exception:
     QR_COMPONENT_OK = False
 
-st.set_page_config(page_title="IT Asset Tracker (GSheets)", page_icon="🖥️", layout="wide")
+# --- PDF via pure-Python fpdf2 ---
+from fpdf import FPDF
+
+st.set_page_config(page_title="IT Asset Tracker (GSheets + fpdf2)", page_icon="🖥️", layout="wide")
 
 SHEET_ID = st.secrets.get("SHEET_ID", "")
 GCP_INFO = dict(st.secrets.get("gcp", {}))
@@ -81,48 +80,56 @@ def gen_next_tag(df, branch_code: str) -> str:
     count = (df["branch"] == branch_code).sum() if "branch" in df.columns else 0
     return f"IT-{yy}{branch_code}-{count+1:04d}"
 
-def qrcode_png(data: str, box_size=6, border=2) -> BytesIO:
+def qrcode_png_bytes(data: str, box_size=6, border=1) -> bytes:
+    from io import BytesIO
     img = qrcode.make(data, box_size=box_size, border=border)
     buf = BytesIO()
     img.save(buf, format="PNG")
-    buf.seek(0)
-    return buf
+    return buf.getvalue()
 
-def build_labels_pdf(rows: pd.DataFrame, label_w_mm=62, label_h_mm=29, margin_mm=5, cols=3, rows_per_page=8):
-    packet = BytesIO()
-    c = canvas.Canvas(packet, pagesize=A4)
-    page_w, page_h = A4
-    x0 = margin_mm * mm
-    y0 = page_h - margin_mm * mm
-    col_w = label_w_mm * mm
-    row_h = label_h_mm * mm
+def build_labels_pdf_fpdf(rows: pd.DataFrame, label_w_mm=62, label_h_mm=29, margin_mm=5, cols=3, rows_per_page=8) -> bytes:
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=False, margin=0)
+    page_w, page_h = (210, 297)
+    col_w = label_w_mm
+    row_h = label_h_mm
+    x0 = margin_mm
+    y0 = margin_mm
+
+    def _new_page():
+        pdf.add_page()
+
+    _new_page()
     i = 0
     for _, r in rows.iterrows():
         col = i % cols
         row = (i // cols) % rows_per_page
-        if i > 0 and row == 0 and col == 0:
-            c.showPage()
-            y0 = page_h - margin_mm * mm
-        x = x0 + col * col_w
-        y = y0 - (row + 1) * row_h
-        c.setFont("Helvetica-Bold", 10)
-        tag = r.get("asset_tag","")
-        name = (r.get("name","") or "")[:28]
-        branch = r.get("branch","")
-        c.drawString(x + 2*mm, y + row_h - 6*mm, f"{tag}")
-        c.setFont("Helvetica", 9)
-        c.drawString(x + 2*mm, y + row_h - 11*mm, f"{name}")
-        c.setFont("Helvetica", 8)
-        c.drawString(x + 2*mm, y + 3*mm, f"{branch}")
-        qr_buf = qrcode_png(tag, box_size=3, border=0)
-        qr_img = ImageReader(qr_buf)
-        qr_size = 20 * mm
-        c.drawImage(qr_img, x + col_w - qr_size - 2*mm, y + (row_h - qr_size)/2, qr_size, qr_size, mask='auto')
-        i += 1
-    c.save()
-    packet.seek(0)
-    return packet
+        if i>0 and row==0 and col==0:
+            _new_page()
+        x = x0 + col*col_w
+        y = y0 + row*row_h
 
+        tag = str(r.get("asset_tag",""))
+        name = str(r.get("name",""))[:28]
+        branch = str(r.get("branch",""))
+
+        pdf.set_font("Helvetica", style="B", size=10)
+        pdf.text(x+2, y+6, tag)
+        pdf.set_font("Helvetica", size=9)
+        pdf.text(x+2, y+11, name)
+        pdf.set_font("Helvetica", size=8)
+        pdf.text(x+2, y+row_h-3, branch)
+
+        qr_bytes = qrcode_png_bytes(tag, box_size=3, border=0)
+        qr_x = x + col_w - 22
+        qr_y = y + (row_h - 20)/2
+        pdf.image_stream(qr_bytes, x=qr_x, y=qr_y, w=20, h=20)
+
+        i += 1
+
+    return pdf.output(dest="S").encode("latin-1")
+
+# ----------------------------- AUTH -----------------------------
 def do_login():
     creds = {"usernames": {}}
     for uname, v in st.secrets.get("auth", {}).get("credentials", {}).get("usernames", {}).items():
@@ -151,7 +158,8 @@ def do_login():
     else:
         st.stop()
 
-st.title("🖥️ IT Asset Tracker (Google Sheets + Login + Mobile Scan)")
+# ----------------------------- MAIN -----------------------------
+st.title("🖥️ IT Asset Tracker (Google Sheets + Login + Mobile Scan + fpdf2)")
 
 if not do_login():
     st.stop()
@@ -285,7 +293,7 @@ elif page == "ค้นหา + อัปเดต":
     st.download_button("ดาวน์โหลดเป็น CSV", data=dfq.to_csv(index=False).encode("utf-8-sig"), file_name="assets_export.csv", mime="text/csv")
 
 elif page == "พิมพ์แท็ก":
-    st.subheader("สร้างไฟล์ PDF สำหรับพิมพ์แท็ก")
+    st.subheader("สร้างไฟล์ PDF สำหรับพิมพ์แท็ก (fpdf2)")
     st.dataframe(df, height=250)
     selected = st.multiselect("เลือก Asset Tag", options=df["asset_tag"].tolist(), default=df["asset_tag"].tolist())
     subset = df[df["asset_tag"].isin(selected)]
@@ -295,8 +303,8 @@ elif page == "พิมพ์แท็ก":
     cols = colz.number_input("จำนวนคอลัมน์ต่อแถว", min_value=1, max_value=5, value=3)
     rows_per_page = st.number_input("จำนวนแถวต่อหน้า", min_value=1, max_value=20, value=8)
     if st.button("สร้าง PDF"):
-        pdf = build_labels_pdf(subset, label_w_mm=w, label_h_mm=h, cols=int(cols), rows_per_page=int(rows_per_page))
-        st.download_button("ดาวน์โหลด PDF แท็ก", data=pdf, file_name="asset_tags.pdf", mime="application/pdf")
+        pdf_bytes = build_labels_pdf_fpdf(subset, label_w_mm=w, label_h_mm=h, cols=int(cols), rows_per_page=int(rows_per_page))
+        st.download_button("ดาวน์โหลด PDF แท็ก", data=pdf_bytes, file_name="asset_tags.pdf", mime="application/pdf")
 
 elif page == "ประวัติการเปลี่ยนแปลง":
     st.subheader("ประวัติทั้งหมด (ใหม่ล่าสุดอยู่บน)")
