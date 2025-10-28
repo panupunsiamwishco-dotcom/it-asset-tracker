@@ -131,22 +131,55 @@ def build_labels_pdf_fpdf(rows: pd.DataFrame, label_w_mm=62, label_h_mm=29, marg
 
 # ----------------------------- AUTH -----------------------------
 def do_login():
+    # โหลด credentials จาก secrets
+    raw_users = (
+        st.secrets.get("auth", {})
+        .get("credentials", {})
+        .get("usernames", {})
+    )
+
+    # แปลงเป็นฟอร์แมตที่ streamlit-authenticator ต้องการ
     creds = {"usernames": {}}
-    for uname, v in st.secrets.get("auth", {}).get("credentials", {}).get("usernames", {}).items():
+    for uname, v in raw_users.items():
         creds["usernames"][uname] = {
-            "email": v.get("email",""),
-            "name": v.get("name",""),
-            "password": v.get("password",""),
+            "email": v.get("email", ""),
+            "name": v.get("name", ""),
+            "password": v.get("password", ""),  # ต้องเป็น bcrypt hash
         }
+
+    # ถ้าไม่มีผู้ใช้เลย ให้แจ้งและหยุด ไม่งั้น login() จะคืน None แล้วพัง
+    if not creds["usernames"]:
+        st.sidebar.error("ยังไม่พบผู้ใช้ใน secrets.toml → [auth.credentials.usernames.*]")
+        st.stop()
+
     cookie_name = st.secrets.get("auth", {}).get("cookie_name", "it_asset_app")
     cookie_key = st.secrets.get("auth", {}).get("cookie_key", "change_me")
+
     authenticator = stauth.Authenticate(
         credentials=creds,
         cookie_name=cookie_name,
         key=cookie_key,
-        cookie_expiry_days=7
+        cookie_expiry_days=7,
     )
-    name, auth_status, username = authenticator.login(location="sidebar", fields={"Form name":"เข้าสู่ระบบ","Username":"ผู้ใช้","Password":"รหัสผ่าน"})
+
+    # ── สำคัญ: รองรับกรณี login() คืน None ในบางช่วง/บางเวอร์ชัน ──
+    login_ret = authenticator.login(
+        location="sidebar",
+        fields={"Form name": "เข้าสู่ระบบ", "Username": "ผู้ใช้", "Password": "รหัสผ่าน"},
+    )
+
+    # v0.4.x ปกติควรคืน (name, authentication_status, username)
+    name = auth_status = username = None
+    if isinstance(login_ret, tuple) and len(login_ret) == 3:
+        name, auth_status, username = login_ret
+    elif isinstance(login_ret, dict):  # เผื่ออนาคตเปลี่ยนเป็น dict
+        name = login_ret.get("name")
+        auth_status = login_ret.get("authentication_status")
+        username = login_ret.get("username")
+    else:
+        # ยังไม่กดปุ่ม/ยังไม่พร้อม → แสดงฟอร์มไว้แล้วหยุดตรงนี้
+        st.stop()
+
     if auth_status:
         authenticator.logout("ออกจากระบบ", "sidebar")
         st.sidebar.success(f"ยินดีต้อนรับ {name}")
@@ -157,6 +190,7 @@ def do_login():
         return False
     else:
         st.stop()
+
 
 # ----------------------------- MAIN -----------------------------
 st.title("🖥️ IT Asset Tracker (Google Sheets + Login + Mobile Scan + fpdf2)")
